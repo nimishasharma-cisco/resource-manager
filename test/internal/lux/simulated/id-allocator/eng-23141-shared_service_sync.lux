@@ -1,0 +1,95 @@
+[doc "Test shared pool between services."]
+
+[config skip=TAILFSKIP_JAVA]
+[config skip=TAILFSKIP_SUNOS]
+
+[include ../../luxinc/resource-manager.luxinc]
+
+[global TEST_NCS_DIR=$DIR/../../../../ncs]
+
+[shell startup]
+    -$fail_pattern
+    [invoke startup]
+
+[shell cli]
+    -$fail_pattern
+    [invoke ncs-cli]
+    [invoke check-pkgs]
+    [invoke sync-from-device]
+
+    [invoke ncs-enter-config]
+
+    !set java-vm java-logging logger com.tailf.pkg level level-debug
+    ?$NCS_PROMPT_CONF
+
+    [invoke commit]
+
+    [invoke log "Create a pool via a service."]
+    !set services id-pool-create-python ptc pool tpcpooltest range start 10 end 200
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+    !run show status id-allocator
+    """??
+    pool tpcpooltest {
+        available 10 200;
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke log "Use a service that allocates one id"]
+    !set services id-loop s1 pool tpcpooltest device cisco-ios0 unit 4 description hej
+    ?$NCS_PROMPT_CONF
+    [invoke commit-label set_service]
+    !run show status id-allocator
+    """??
+    pool tpcpooltest {
+        available 11 200;
+        allocation 10;
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke log "Use a second service that allocates one id"]
+    !set services id-loop s2 pool tpcpooltest device cisco-ios0 unit 4 description hej
+    ?$NCS_PROMPT_CONF
+    [invoke commit-label set_service]
+    !run show status id-allocator
+    """??
+    pool tpcpooltest {
+        available 12 200;
+        allocation 10;
+        allocation 11;
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke log "Check services sync status:"]
+    !request services id-loop s1 check-sync
+    """??
+    in-sync true
+    """
+    ?$NCS_PROMPT_CONF
+
+    !request services id-loop s2 check-sync
+    """??
+    in-sync true
+    """
+    ?$NCS_PROMPT_CONF
+
+    !request services id-pool-create-python ptc check-sync
+    """??
+    in-sync true
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke ncs-exit-config]
+
+    !request devices disconnect
+    ?\[ok\]
+    ?$NCS_PROMPT_OPER
+
+    !exit
+    ?SH-PROMPT:
+
+[cleanup]
+    [invoke ncs-cleanup]

@@ -1,0 +1,121 @@
+[doc Test RM-66 ticket]
+
+[config skip=TAILFSKIP_JAVA]
+[config skip=TAILFSKIP_SUNOS]
+
+[include ../../luxinc/resource-manager.luxinc]
+
+[global TEST_NCS_DIR=$DIR/../../../../ncs]
+
+[shell startup]
+    -$fail_pattern
+    [invoke startup]
+
+[shell cli]
+    -$fail_pattern
+    [invoke ncs-cli]
+    [invoke check-pkgs]
+    [invoke sync-from-device]
+    [invoke ncs-enter-config]
+
+    !set java-vm java-logging logger com.tailf.pkg level level-debug
+    ?$NCS_PROMPT_CONF
+
+    [invoke commit]
+
+    !set resource-pools ip-address-pool subnet_pool subnet 10.6.12.0 17
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !run show status ip-allocator
+    """??
+    pool subnet_pool {
+        subnet 10.6.0.0 17;
+        subnet 10.6.12.0 17;
+        available 10.6.0.0 17;
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !set resource-pools ip-address-pool subnet_pool allocation testbroadcast username admin request subnet-size 32 subnet-start-ip 10.6.0.0
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !run show status resource-pools ip-address-pool subnet_pool
+    # """??
+    # allocation testbroadcast {
+    #     response {
+    #         error "com.tailf.pkg.ipam.exceptions.AddressRequestNotAvailableException: Requested subnet /10.6.0.0/32 is a broadcast address in pool subnet_pool."";
+    #     }
+    # }
+    # """
+    ?allocation testbroadcast
+    ?error.*AddressRequestNotAvailableException: Requested subnet /10.6.0.0/32 is a broadcast address in pool subnet_pool."
+    ?$NCS_PROMPT_CONF
+
+    !delete resource-pools ip-address-pool subnet_pool allocation testbroadcast
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !set resource-pools ip-address-pool subnet_pool allocation test username admin request subnet-size 31 subnet-start-ip 10.6.12.12
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !show resource-pools ip-address-pool subnet_pool allocation
+    """??
+    allocation test {
+        username admin;
+        request {
+            subnet-size     31;
+            subnet-start-ip 10.6.12.12;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show status resource-pools
+    """??
+    ip-address-pool subnet_pool {
+        allocation test {
+            response {
+                subnet 10.6.12.12/31;
+                from   10.6.0.0/17;
+            }
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show status ip-allocator
+    """??
+    pool subnet_pool {
+        subnet 10.6.0.0 17;
+        subnet 10.6.12.0 17;
+        available 10.6.0.0 21;
+        available 10.6.8.0 22;
+        available 10.6.12.0 29;
+        available 10.6.12.8 30;
+        available 10.6.12.14 31;
+        available 10.6.12.16 28;
+        available 10.6.12.32 27;
+        available 10.6.12.64 26;
+        available 10.6.12.128 25;
+        available 10.6.13.0 24;
+        available 10.6.14.0 23;
+        available 10.6.16.0 20;
+        available 10.6.32.0 19;
+        available 10.6.64.0 18;
+        allocation 10.6.12.12 31 {
+            owner      "";
+            username   admin;
+            request-id test;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+[shell jvm-log-check]
+    [invoke check-jvmlog]
+
+[cleanup]
+    [invoke ncs-cleanup]

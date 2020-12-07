@@ -1,0 +1,179 @@
+[global IPCBASE=4569]
+[include errchk-ncs.luxinc]
+
+#
+# Nice ncs_cmd setup
+#
+[macro ncs_cmd-setup]
+    !export NCS_CMD_TRACE_SUFFIX=.$LUX_SHELLNAME
+    ?SH-PROMPT
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT
+    !export NCS_CMD_TRACE_APPEND=yes
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT
+[endmacro]
+
+# Restart a running node in the current shell
+[macro restart-node]
+    !ncs --stop
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT
+    !ncs -c ./ncs.conf --addloadpath ${NCS_DIR}/etc/ncs --with-package-reload
+    ?SH-PROMPT
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro stop-node]
+    !ncs --stop
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT
+[endmacro]
+
+[macro start-node]
+    !ncs -c ./ncs.conf --addloadpath ${NCS_DIR}/etc/ncs --with-package-reload
+    ?SH-PROMPT
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+# Setup IPC environment according to current shell name
+[macro ipc-env-setup]
+    !echo ===${LUX_SHELLNAME}===
+    ?===.*[^0-9]([0-9]+)===$
+    [my node-number=$1]
+    !NCS_IPC_PORT=$$((${IPCBASE} + ${node-number}))
+    ?SH-PROMPT:
+    !IPC_PORT=$$NCS_IPC_PORT
+    ?SH-PROMPT:
+    !export NCS_IPC_PORT IPC_PORT
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+# Initialize and start node according to current shell name
+[macro init-node]
+    [local node-name=${LUX_SHELLNAME}]
+    !echo NODE${node-name}
+    ?NODE[a-zA-Z_-]+([0-9]+)$
+    [local node-number=$1]
+    ?SH-PROMPT:
+
+    # change directory and setup environment
+    !cd ${node-name}
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT
+    !sname=${node-name}
+    !NCS_IPC_PORT=$$((${IPCBASE} + ${node-number}))
+    ?SH-PROMPT:
+    !IPC_PORT=$$NCS_IPC_PORT
+    ?SH-PROMPT
+    !export sname NCS_IPC_PORT IPC_PORT
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT
+    !ncs --stop || true
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT
+    !rm -f ncs-cdb/*.cdb
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT
+
+    -Daemon died
+    !ncs -c ./ncs.conf --addloadpath ${NCS_DIR}/etc/ncs
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro make-read-only]
+    !ncs_cmd -c "mro"
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro make-read-write]
+    !ncs_cmd -c "mrw"
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro make-master]
+    !ncs_cmd -c "master ${node-name}"
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro make-slave MASTERNAME]
+    !ncs_cmd -c "slave ${node-name} ${MASTERNAME} 127.0.0.1"
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro make-none]
+    !ncs_cmd -c "none"
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro make-relay]
+    !ncs_cmd -c "relay"
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro dead-slave slave]
+    !ncs_cmd -c "dead_slave $slave"
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro check-ncserr node]
+    [invoke ncs_fail_error_check $node]
+[endmacro]
+
+[macro stop-all-nodes]
+    !env NCS_IPC_PORT=$$((${IPCBASE} + 0)) ncs --stop
+    ?SH-PROMPT
+    !echo ==$?==
+    ?==[0-9]+==
+    ?SH-PROMPT
+    !env NCS_IPC_PORT=$$((${IPCBASE} + 1)) ncs --stop
+    ?SH-PROMPT
+    !echo ==$?==
+    ?==[0-9]+==
+    ?SH-PROMPT
+[endmacro]

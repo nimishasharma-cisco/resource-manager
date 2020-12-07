@@ -1,0 +1,170 @@
+[doc Test mechanism for allocating prefered ip addresses (pre-allocating ips)]
+
+[config skip=TAILFSKIP_JAVA]
+[config skip=TAILFSKIP_SUNOS]
+
+[include ../../luxinc/resource-manager.luxinc]
+
+[global TEST_NCS_DIR=$DIR/../../../../ncs]
+
+[shell startup]
+    -$fail_pattern
+    [invoke startup]
+
+[shell cli]
+    -$fail_pattern
+    [invoke ncs-cli]
+    [invoke check-pkgs]
+    [invoke sync-from-device]
+    [invoke ncs-enter-config]
+
+    !set java-vm java-logging logger com.tailf.pkg level level-debug
+    ?$NCS_PROMPT_CONF
+
+    [invoke commit]
+
+    !set resource-pools ip-address-pool the_pool subnet 186.16.0.0 16
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 186.16.0.0 16;
+        available 186.16.0.0 16;
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke log "Re-allocate request using subnet-start-ip (the allocations can also be commited toghether here)."]
+    !set resource-pools ip-address-pool the_pool allocation MPLUSENCS-mplusencs2 username admin request subnet-start-ip 186.16.0.8 subnet-size 29
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !set resource-pools ip-address-pool the_pool allocation MMINUSENCS-mminencs username admin request subnet-start-ip 186.16.0.32 subnet-size 29
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !set resource-pools ip-address-pool the_pool allocation MENCS-mencs username admin request subnet-start-ip 186.16.0.0 subnet-size 29
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+    
+    !set resource-pools ip-address-pool the_pool allocation LENCS-lencs1 username admin request subnet-start-ip 186.16.0.16 subnet-size 29
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !set resource-pools ip-address-pool the_pool allocation LENCS-lencs2 username admin request subnet-start-ip 186.16.0.24 subnet-size 29
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !show resource-pools ip-address-pool the_pool allocation
+    """??
+     show resource-pools ip-address-pool the_pool allocation
+    allocation LENCS-lencs1 {
+        username admin;
+        request {
+            subnet-size     29;
+            subnet-start-ip 186.16.0.16;
+        }
+    }
+    allocation LENCS-lencs2 {
+        username admin;
+        request {
+            subnet-size     29;
+            subnet-start-ip 186.16.0.24;
+        }
+    }
+    allocation MENCS-mencs {
+        username admin;
+        request {
+            subnet-size     29;
+            subnet-start-ip 186.16.0.0;
+        }
+    }
+    allocation MMINUSENCS-mminencs {
+        username admin;
+        request {
+            subnet-size     29;
+            subnet-start-ip 186.16.0.32;
+        }
+    }
+    allocation MPLUSENCS-mplusencs2 {
+        username admin;
+        request {
+            subnet-size     29;
+            subnet-start-ip 186.16.0.8;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show resource-pools ip-address-pool the_pool
+    """??
+     run show resource-pools ip-address-pool the_pool
+    NAME      ID                    ERROR  SUBNET          FROM           
+    ----------------------------------------------------------------------
+    the_pool  LENCS-lencs1          -      186.16.0.16/29  186.16.0.0/16  
+              LENCS-lencs2          -      186.16.0.24/29  186.16.0.0/16  
+              MENCS-mencs           -      186.16.0.0/29   186.16.0.0/16  
+              MMINUSENCS-mminencs   -      186.16.0.32/29  186.16.0.0/16  
+              MPLUSENCS-mplusencs2  -      186.16.0.8/29   186.16.0.0/16  
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 186.16.0.0 16;
+        available 186.16.0.40 29;
+        available 186.16.0.48 28;
+        available 186.16.0.64 26;
+        available 186.16.0.128 25;
+        available 186.16.1.0 24;
+        available 186.16.2.0 23;
+        available 186.16.4.0 22;
+        available 186.16.8.0 21;
+        available 186.16.16.0 20;
+        available 186.16.32.0 19;
+        available 186.16.64.0 18;
+        available 186.16.128.0 17;
+    """
+    """??
+        allocation 186.16.0.0 29 {
+            owner      "";
+            username   admin;
+            request-id MENCS-mencs;
+        }
+        allocation 186.16.0.8 29 {
+            owner      "";
+            username   admin;
+            request-id MPLUSENCS-mplusencs2;
+        }
+        allocation 186.16.0.16 29 {
+            owner      "";
+            username   admin;
+            request-id LENCS-lencs1;
+        }
+        allocation 186.16.0.24 29 {
+            owner      "";
+            username   admin;
+            request-id LENCS-lencs2;
+        }
+        allocation 186.16.0.32 29 {
+            owner      "";
+            username   admin;
+            request-id MMINUSENCS-mminencs;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+[shell jvm-log-check]
+    [invoke check-jvmlog]
+
+[cleanup]
+    [invoke ncs-cleanup]

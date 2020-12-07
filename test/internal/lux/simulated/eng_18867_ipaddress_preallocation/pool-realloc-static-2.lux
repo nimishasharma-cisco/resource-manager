@@ -1,0 +1,161 @@
+[doc Test mechanism for allocating prefered ip addresses (pre-allocating ips)]
+
+[config skip=TAILFSKIP_JAVA]
+[config skip=TAILFSKIP_SUNOS]
+
+[include ../../luxinc/resource-manager.luxinc]
+
+[global TEST_NCS_DIR=$DIR/../../../../ncs]
+
+[shell startup]
+    -$fail_pattern
+    [invoke startup]
+
+[shell cli]
+    -$fail_pattern
+    [invoke ncs-cli]
+    [invoke check-pkgs]
+    [invoke sync-from-device]
+    [invoke ncs-enter-config]
+
+    !set java-vm java-logging logger com.tailf.pkg level level-debug
+    ?$NCS_PROMPT_CONF
+
+    [invoke commit]
+
+    !set resource-pools ip-address-pool the_pool subnet 10.0.0.0 8
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 8;
+        available 10.0.0.0 8;
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke log "Re-allocate request using subnet-start-ip (the allocations can also be commited toghether here)."]
+    !set resource-pools ip-address-pool the_pool allocation MPLUSENCS-mplusencs2 username admin request subnet-start-ip 10.0.0.100 subnet-size 32
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !set resource-pools ip-address-pool the_pool allocation MMINUSENCS-mminencs username admin request subnet-start-ip 10.0.0.101 subnet-size 32
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !set resource-pools ip-address-pool the_pool allocation MENCS-mencs username admin request subnet-start-ip 10.0.0.99 subnet-size 32
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+    
+    !show resource-pools ip-address-pool the_pool allocation
+    """??
+     show resource-pools ip-address-pool the_pool allocation
+    allocation MENCS-mencs {
+        username admin;
+        request {
+            subnet-size     32;
+            subnet-start-ip 10.0.0.99;
+        }
+    }
+    allocation MMINUSENCS-mminencs {
+        username admin;
+        request {
+            subnet-size     32;
+            subnet-start-ip 10.0.0.101;
+        }
+    }
+    allocation MPLUSENCS-mplusencs2 {
+        username admin;
+        request {
+            subnet-size     32;
+            subnet-start-ip 10.0.0.100;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show resource-pools ip-address-pool the_pool
+    """??
+     run show resource-pools ip-address-pool the_pool
+    NAME      ID                    ERROR  SUBNET         FROM        
+    ------------------------------------------------------------------
+    the_pool  MENCS-mencs           -      10.0.0.99/32   10.0.0.0/8  
+              MMINUSENCS-mminencs   -      10.0.0.101/32  10.0.0.0/8  
+              MPLUSENCS-mplusencs2  -      10.0.0.100/32  10.0.0.0/8  
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show status ip-allocator
+
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 8;
+        available 10.0.0.0 26;
+        available 10.0.0.64 27;
+        available 10.0.0.96 31;
+        available 10.0.0.98 32;
+        available 10.0.0.102 31;
+        available 10.0.0.104 29;
+        available 10.0.0.112 28;
+        available 10.0.0.128 25;
+        available 10.0.1.0 24;
+        available 10.0.2.0 23;
+        available 10.0.4.0 22;
+        available 10.0.8.0 21;
+        available 10.0.16.0 20;
+        available 10.0.32.0 19;
+        available 10.0.64.0 18;
+        available 10.0.128.0 17;
+        available 10.1.0.0 16;
+        available 10.2.0.0 15;
+        available 10.4.0.0 14;
+        available 10.8.0.0 13;
+        available 10.16.0.0 12;
+        available 10.32.0.0 11;
+        available 10.64.0.0 10;
+        available 10.128.0.0 9;
+    """
+    """??
+        allocation 10.0.0.99 32 {
+            owner      "";
+            username   admin;
+            request-id MENCS-mencs;
+        }
+        allocation 10.0.0.100 32 {
+            owner      "";
+            username   admin;
+            request-id MPLUSENCS-mplusencs2;
+        }
+        allocation 10.0.0.101 32 {
+            owner      "";
+            username   admin;
+            request-id MMINUSENCS-mminencs;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !delete resource-pools ip-address-pool the_pool allocation
+
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 8;
+        available 10.0.0.0 8;
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+[shell jvm-log-check]
+    [invoke check-jvmlog]
+
+[cleanup]
+    [invoke ncs-cleanup]

@@ -1,0 +1,584 @@
+[doc Test mechanism for allocating prefered ip addresses (pre-allocating ips)]
+
+[config skip=TAILFSKIP_JAVA]
+[config skip=TAILFSKIP_SUNOS]
+
+[include ../../luxinc/resource-manager.luxinc]
+
+[global TEST_NCS_DIR=$DIR/../../../../ncs]
+
+[shell startup]
+    -$fail_pattern
+    [invoke startup]
+
+[shell cli]
+    -$fail_pattern
+    [invoke ncs-cli]
+    [invoke check-pkgs]
+    [invoke sync-from-device]
+    [invoke ncs-enter-config]
+
+    !set java-vm java-logging logger com.tailf.pkg level level-debug
+    ?$NCS_PROMPT_CONF
+
+    [invoke commit]
+
+    !set resource-pools ip-address-pool the_pool subnet 10.0.0.0 24
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 24;
+    }
+    """
+    ?$NCS_PROMPT_CONF
+    !set resource-pools ip-address-pool the_pool allocation a1 username admin request subnet-size 32
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.2 31;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.16 28;
+        available 10.0.0.32 27;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+    """
+
+    """??
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !set resource-pools ip-address-pool the_pool allocation a2 username admin request subnet-size 32
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !show resource-pools ip-address-pool the_pool allocation
+    """??
+    allocation a1 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a2 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.3 32;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.16 28;
+        available 10.0.0.32 27;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+    """
+    """??
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+        allocation 10.0.0.2 32 {
+            owner      "";
+            username   admin;
+            request-id a2;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+
+    [invoke log "Request a minimal static allocation - with free and matching subnet size"]
+    !set resource-pools ip-address-pool the_pool allocation a3 username admin request subnet-start-ip 10.0.0.3 subnet-size 32
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !show resource-pools ip-address-pool the_pool allocation
+    """??
+    allocation a1 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a2 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a3 {
+        username admin;
+        request {
+            subnet-size     32;
+            subnet-start-ip 10.0.0.3;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.16 28;
+        available 10.0.0.32 27;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+    """
+    """??
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+        allocation 10.0.0.2 32 {
+            owner      "";
+            username   admin;
+            request-id a2;
+        }
+        allocation 10.0.0.3 32 {
+            owner      "";
+            username   admin;
+            request-id a3;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke log "Request a larger static allocation - with free and matching subnet size"]
+    !set resource-pools ip-address-pool the_pool allocation a4 username admin request subnet-start-ip 10.0.0.16 subnet-size 28
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !show resource-pools ip-address-pool the_pool allocation
+    """??
+    allocation a1 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a2 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a3 {
+        username admin;
+        request {
+            subnet-size     32;
+            subnet-start-ip 10.0.0.3;
+        }
+    }
+    allocation a4 {
+        username admin;
+        request {
+            subnet-size     28;
+            subnet-start-ip 10.0.0.16;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.32 27;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+    """
+    """??
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+        allocation 10.0.0.2 32 {
+            owner      "";
+            username   admin;
+            request-id a2;
+        }
+        allocation 10.0.0.3 32 {
+            owner      "";
+            username   admin;
+            request-id a3;
+        }
+        allocation 10.0.0.16 28 {
+            owner      "";
+            username   admin;
+            request-id a4;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke log "Request a smaller static allocation from a larger subnet size."]
+    !set resource-pools ip-address-pool the_pool allocation a5 username admin request subnet-start-ip 10.0.0.36 subnet-size 30
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !show resource-pools ip-address-pool the_pool allocation
+    """??
+    allocation a1 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a2 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a3 {
+        username admin;
+        request {
+            subnet-size     32;
+            subnet-start-ip 10.0.0.3;
+        }
+    }
+    allocation a4 {
+        username admin;
+        request {
+            subnet-size     28;
+            subnet-start-ip 10.0.0.16;
+        }
+    }
+    allocation a5 {
+        username admin;
+        request {
+            subnet-size     30;
+            subnet-start-ip 10.0.0.36;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.32 30;
+        available 10.0.0.40 29;
+        available 10.0.0.48 28;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+    """
+    """??
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+        allocation 10.0.0.2 32 {
+            owner      "";
+            username   admin;
+            request-id a2;
+        }
+        allocation 10.0.0.3 32 {
+            owner      "";
+            username   admin;
+            request-id a3;
+        }
+        allocation 10.0.0.16 28 {
+            owner      "";
+            username   admin;
+            request-id a4;
+        }
+        allocation 10.0.0.36 30 {
+            owner      "";
+            username   admin;
+            request-id a5;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke log "Requested subnet is not available."]
+    !set resource-pools ip-address-pool the_pool allocation a6 username admin request subnet-start-ip 10.0.0.36 subnet-size 31
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !show resource-pools ip-address-pool the_pool allocation
+    """??
+    allocation a1 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a2 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a3 {
+        username admin;
+        request {
+            subnet-size     32;
+            subnet-start-ip 10.0.0.3;
+        }
+    }
+    allocation a4 {
+        username admin;
+        request {
+            subnet-size     28;
+            subnet-start-ip 10.0.0.16;
+        }
+    }
+    allocation a5 {
+        username admin;
+        request {
+            subnet-size     30;
+            subnet-start-ip 10.0.0.36;
+        }
+    }
+    allocation a6 {
+        username admin;
+        request {
+            subnet-size     31;
+            subnet-start-ip 10.0.0.36;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.32 30;
+        available 10.0.0.40 29;
+        available 10.0.0.48 28;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+    """
+    """??
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+        allocation 10.0.0.2 32 {
+            owner      "";
+            username   admin;
+            request-id a2;
+        }
+        allocation 10.0.0.3 32 {
+            owner      "";
+            username   admin;
+            request-id a3;
+        }
+        allocation 10.0.0.16 28 {
+            owner      "";
+            username   admin;
+            request-id a4;
+        }
+        allocation 10.0.0.36 30 {
+            owner      "";
+            username   admin;
+            request-id a5;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show resource-pools ip-address-pool the_pool
+    """??
+     run show resource-pools ip-address-pool the_pool
+    resource-pools ip-address-pool the_pool
+     allocation a1
+      response subnet 10.0.0.1/32
+      response from 10.0.0.0/24
+     allocation a2
+      response subnet 10.0.0.2/32
+      response from 10.0.0.0/24
+     allocation a3
+      response subnet 10.0.0.3/32
+      response from 10.0.0.0/24
+     allocation a4
+      response subnet 10.0.0.16/28
+      response from 10.0.0.0/24
+     allocation a5
+      response subnet 10.0.0.36/30
+      response from 10.0.0.0/24
+     allocation a6
+      response error "com.tailf.pkg.ipam.exceptions.AddressRequestNotAvailableException: Requested subnet /10.0.0.36/31 not available."
+    """
+    ?$NCS_PROMPT_CONF
+
+    [invoke log "Requested subnet is invalid (the Subnet contains but doesn't start with the subnet-start-ip)."]
+    !set resource-pools ip-address-pool the_pool allocation a7 username admin request subnet-start-ip 10.0.0.86 subnet-size 29
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    !show resource-pools ip-address-pool the_pool allocation
+    """??
+    allocation a1 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a2 {
+        username admin;
+        request {
+            subnet-size 32;
+        }
+    }
+    allocation a3 {
+        username admin;
+        request {
+            subnet-size     32;
+            subnet-start-ip 10.0.0.3;
+        }
+    }
+    allocation a4 {
+        username admin;
+        request {
+            subnet-size     28;
+            subnet-start-ip 10.0.0.16;
+        }
+    }
+    allocation a5 {
+        username admin;
+        request {
+            subnet-size     30;
+            subnet-start-ip 10.0.0.36;
+        }
+    }
+    allocation a6 {
+        username admin;
+        request {
+            subnet-size     31;
+            subnet-start-ip 10.0.0.36;
+        }
+    }
+    allocation a7 {
+        username admin;
+        request {
+            subnet-size     29;
+            subnet-start-ip 10.0.0.86;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show status ip-allocator
+    """??
+    pool the_pool {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.32 30;
+        available 10.0.0.40 29;
+        available 10.0.0.48 28;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+    """
+    """??
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+        allocation 10.0.0.2 32 {
+            owner      "";
+            username   admin;
+            request-id a2;
+        }
+        allocation 10.0.0.3 32 {
+            owner      "";
+            username   admin;
+            request-id a3;
+        }
+        allocation 10.0.0.16 28 {
+            owner      "";
+            username   admin;
+            request-id a4;
+        }
+        allocation 10.0.0.36 30 {
+            owner      "";
+            username   admin;
+            request-id a5;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+
+    !run show resource-pools ip-address-pool the_pool
+    """??
+     run show resource-pools ip-address-pool the_pool
+    resource-pools ip-address-pool the_pool
+     allocation a1
+      response subnet 10.0.0.1/32
+      response from 10.0.0.0/24
+     allocation a2
+      response subnet 10.0.0.2/32
+      response from 10.0.0.0/24
+     allocation a3
+      response subnet 10.0.0.3/32
+      response from 10.0.0.0/24
+     allocation a4
+      response subnet 10.0.0.16/28
+      response from 10.0.0.0/24
+     allocation a5
+      response subnet 10.0.0.36/30
+      response from 10.0.0.0/24
+     allocation a6
+      response error "com.tailf.pkg.ipam.exceptions.AddressRequestNotAvailableException: Requested subnet /10.0.0.36/31 not available."
+     allocation a7
+      response error "com.tailf.pkg.ipam.exceptions.InvalidNetmaskException: Invalid address/cidr pair."
+    """
+    ?$NCS_PROMPT_CONF
+
+[shell jvm-log-check]
+    [invoke check-jvmlog]
+
+[cleanup]
+    [invoke ncs-cleanup]

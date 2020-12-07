@@ -1,0 +1,37 @@
+[doc "Test of re-deploy for ipaddress allocator"]
+
+[config require=NCS_DIR]
+
+[include ../../../luxinc/resource-manager.luxinc]
+
+[global TEST_NCS_DIR=$DIR/../../../../../ncs]
+
+[shell startup]
+    -$fail_pattern
+    [invoke startup]
+
+[shell cli]
+    [timeout 30]
+    -$fail_pattern
+    [invoke ncs-cli-config-c]
+
+    !load merge $DIR/../cli/subnet8.cli
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    [invoke log "Allocate subnet of size 24 with fail-realloc service"]
+    -Aborted
+    !services ipa-fail-realloc-test test subnet-size 24
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    ?.*ALARM service-activation-failure:.*
+ 
+    !do show alarms alarm-list alarm ncs
+    ???alarms alarm-list alarm ncs
+    ???is-cleared              false
+    ???last-perceived-severity critical
+    ?$NCS_PROMPT_CONF
+
+[cleanup]
+    [invoke ncs-cleanup]

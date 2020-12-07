@@ -1,0 +1,293 @@
+[doc "Test ipaddress allocator ok to modify in HA mode if only master"]
+
+[config skip=TAILFSKIP_JAVA]
+[config skip=TAILFSKIP_SUNOS]
+
+[include ../../../luxinc/resource-manager.luxinc]
+[include ../../../luxinc/ha-macros.luxinc]
+
+[global TEST_NCS_DIR=$DIR/../../../../../ncs]
+[global NCS_CONF_NAME=ncs_ha_simple.conf]
+
+# Initialize and start node according to current shell name
+# Borrowed from ha-macros.luxinc
+#
+[macro init-start-ncs]
+    [local node-name=${LUX_SHELLNAME}]
+    !echo NODE${node-name}
+    ?NODE[a-zA-Z_-]+([0-9]+)$
+    [local node-number=$1]
+    ?SH-PROMPT:
+
+    # Create a dedicated NCS conf file from a template.
+    !make -C ${DIR} init
+    # Copy the dedicated NCS conf file to the NCS run directory.
+    !cp ${DIR}/ncs.conf ${TEST_NCS_DIR}/${NCS_CONF_NAME}
+    ?SH-PROMPT:
+    
+    # change directory and setup environment
+    [invoke exec "cd ${TEST_NCS_DIR}"]
+    
+    !sname=${node-name}
+    !NCS_IPC_PORT=$$((${IPCBASE} + ${node-number}))
+    ?SH-PROMPT:
+    !IPC_PORT=$$NCS_IPC_PORT
+    ?SH-PROMPT
+
+    [invoke exec "export sname NCS_IPC_PORT IPC_PORT"]
+
+    -Daemon died.*
+    -Bad configuration:.*
+    [timeout 20]
+    !ncs --cd ${TEST_NCS_DIR} -c ${TEST_NCS_DIR}/${NCS_CONF_NAME} --addloadpath ${NCS_DIR}/etc/ncs 2>&1 | tee ${TEST_NCS_DIR}/logs/ha_simple_ncs_start.log
+    ?SH-PROMPT:
+    !echo ==$$?==
+    ?==0==
+    ?SH-PROMPT:
+[endmacro]
+
+[macro ncs-cleanup-node node_name]
+    [local ncs_node_name=$node_name]
+    [invoke do-ncs-cleanup]
+[endmacro]
+
+[shell node0]
+    [invoke ncs-stop]
+    [invoke ncs-clean]
+    [invoke ncs_cmd-setup]
+    [invoke init-start-ncs]
+    [progress $LUX_SHELLNAME]
+
+[shell cli0]
+    -$fail_pattern
+    [invoke ipc-env-setup]
+    [invoke ncs-cli-config]
+
+    [invoke log "Set Java log level-debug"]
+    !set java-vm java-logging logger com.tailf.pkg.ipaddressallocator.IPAddressAllocator level level-debug
+    ?\[ok\]
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+    [invoke ncs-exit-config]
+    
+    #
+    # Test 1:
+    #  + Node set to HA mode 'master'.
+    #  + Create ip address pool possible.
+    #  + Make a pool allocation.
+    #
+[shell node0]
+    [invoke log "Set node0 in HA mode 'master'"]
+    [invoke make-master]
+    
+ [shell cli0]
+    -$fail_pattern
+    [invoke log "Check node being in HA mode 'master'"]
+    !show ncs-state ha
+    ?ncs-state ha mode master
+    ?ncs-state ha node-id node0
+    ?$NCS_PROMPT_OPER
+
+    [invoke log "Create ip address pool"]
+    [invoke ncs-enter-config]
+    !set resource-pools ip-address-pool management subnet 10.0.0.0 24
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    [invoke log "Check ip address pool creation"]
+    !run show status ip-allocator
+    """??
+    pool management {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 24;
+    }
+    """
+    ?$NCS_PROMPT_CONF
+    
+    [invoke log "Do allocation a1 from pool"]
+    !set resource-pools ip-address-pool management allocation a1 username admin request subnet-size 32
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+    
+    [invoke log "Check allocation from pool"]
+    !run show status ip-allocator
+    """??
+    pool management {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.2 31;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.16 28;
+        available 10.0.0.32 27;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+    [invoke ncs-exit-config]
+
+    #
+    # Test 2:
+    #  + Node set to HA mode 'none'.
+    #  + Fail pool allocation.
+    #
+[shell node0]
+    [invoke log "Set node0 in HA mode 'none'"]
+    [invoke make-none]
+    
+ [shell cli0]
+    -$fail_pattern
+    [invoke log "Check node being in HA mode 'none'"]
+    !show ncs-state ha
+    ?ncs-state ha mode none
+    ?$NCS_PROMPT_OPER
+
+    [invoke log "Try to do allocation a2 from pool"]
+    [invoke ncs-enter-config]
+    !set resource-pools ip-address-pool management allocation a2 username admin request subnet-size 32
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+    
+    [invoke log "Check allocation a2 not preformed."]
+    !run show status ip-allocator
+    """??
+    pool management {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.2 31;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.16 28;
+        available 10.0.0.32 27;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+    
+    !run show status resource-pools
+    """??
+    ip-address-pool management {
+        allocation a1 {
+            response {
+                subnet 10.0.0.1/32;
+                from   10.0.0.0/24;
+            }
+        }
+        allocation a2;
+    """
+    [invoke ncs-exit-config]
+
+    [invoke log "Check allocation a2 not done in pool."]
+    !show resource-pools ip-address-pool allocation a2 response | display xml
+    """?
+    <config xmlns="http://tail-f.com/ns/config/1.0">
+    \s*<resource-pools xmlns="http://tail-f.com/pkg/resource-allocator">
+    \s*<ip-address-pool xmlns="http://tail-f.com/pkg/ipaddress-allocator">
+    \s*<name>management</name>
+    \s*<allocation>
+    \s*<id>a2</id>
+    \s*</allocation>
+    \s*</ip-address-pool>
+    \s*</resource-pools>
+    </config>
+    """
+    ?$NCS_PROMPT_OPER
+
+    
+    #
+    # Test 3:
+    #  + Node set to HA mode 'master'.
+    #  + Remove last undone allocation.
+    #  + Redo last undone allocation.
+    #
+[shell node0]
+    [invoke log "Set node0 in HA mode 'master'"]
+    [invoke make-master]
+    
+ [shell cli0]
+    -$fail_pattern
+    [invoke log "Check node being in HA mode 'master'"]
+    !show ncs-state ha
+    ?ncs-state ha mode master
+    ?ncs-state ha node-id node0
+    ?$NCS_PROMPT_OPER
+
+    [invoke log "Delete allocation a2 from pool"]
+    [invoke ncs-enter-config]
+    !delete resource-pools ip-address-pool management allocation a2
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+
+    [invoke log "Create allocation a2 anew from pool"]
+    !set resource-pools ip-address-pool management allocation a2 username admin request subnet-size 32
+    ?$NCS_PROMPT_CONF
+    [invoke commit]
+    
+    [invoke log "Check allocation a2 is done for pool"]
+    !run show status ip-allocator
+    """??
+    pool management {
+        subnet 10.0.0.0 24;
+        available 10.0.0.0 32;
+        available 10.0.0.3 32;
+        available 10.0.0.4 30;
+        available 10.0.0.8 29;
+        available 10.0.0.16 28;
+        available 10.0.0.32 27;
+        available 10.0.0.64 26;
+        available 10.0.0.128 25;
+        allocation 10.0.0.1 32 {
+            owner      "";
+            username   admin;
+            request-id a1;
+        }
+        allocation 10.0.0.2 32 {
+            owner      "";
+            username   admin;
+            request-id a2;
+        }
+    }
+    """
+    ?$NCS_PROMPT_CONF
+    
+    !run show status resource-pools
+    """??
+    ip-address-pool management {
+        allocation a1 {
+            response {
+                subnet 10.0.0.1/32;
+                from   10.0.0.0/24;
+            }
+        }
+        allocation a2 {
+            response {
+                subnet 10.0.0.2/32;
+                from   10.0.0.0/24;
+            }
+        }
+    """
+    ?$NCS_PROMPT_CONF
+    
+[shell jvm-log-check]
+    [invoke check-jvmlog]
+
+[cleanup]
+    [invoke log "Cleaning up"]
+    !NCS_IPC_PORT=$$((${IPCBASE} + 0))
+    ?SH-PROMPT:
+    [invoke exec "export sname NCS_IPC_PORT IPC_PORT"]
+
+    [invoke ncs_fail_error_check node0]
+    [invoke ncs-cleanup-node "node0"]

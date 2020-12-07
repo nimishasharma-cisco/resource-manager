@@ -1,0 +1,59 @@
+[macro ncs_fail_lux_check]
+    ~if [ "$$LUX_START_REASON" = "fail"  -a -d logs ]; then
+    ~  mkdir -p $LUX_EXTRA_LOGS/ncs;
+    ~  cp -r ./logs $LUX_EXTRA_LOGS/ncs;
+    ~  test -f MODE && echo MODE `cat MODE`;
+    ~  ncs --printlog logs/ncserr.log;
+    ~  cat logs/ncs-java-vm.log;
+    !fi; true
+    ?SH-PROMPT:
+[endmacro]
+
+
+[macro netsim_get_logs]
+   ~netsim_dir=$(ncs-netsim whichdir 2>/dev/null);
+   ~if [ -n "$$netsim_dir" ]; then
+   ~  for logdir in $$netsim_dir/*/*/logs; do
+   ~    echo $$logdir;
+   ~    pkg_dir=$(dirname $$logdir);
+   ~    pkg_name=$(basename $$pkg_dir);
+   ~    mkdir -p $LUX_EXTRA_LOGS/netsim/$$pkg_name;
+   ~    cp -r $$logdir $LUX_EXTRA_LOGS/netsim/$$pkg_name;
+   ~  done;
+   ~fi;
+   !true
+   ?SH-PROMPT:
+[endmacro]
+
+[macro ncs_fail_single_error_check]
+    ~mkdir -p $LUX_EXTRA_LOGS/ncs;
+    ~cp -r logs $LUX_EXTRA_LOGS/ncs;
+    ~if [ -f "logs/ncserr.log.1" ]; then
+    ~  ${NCS_DIR}/bin/ncs --printlog logs/ncserr.log > err;
+    !fi; true
+    ?SH-PROMPT:
+     -^== ERROR ==
+    !if [ -s err ]; then cat err ; rm -f err ; echo "== ERROR ==" ; fi
+    ?SH-PROMPT
+    !rm -f err
+    ?SH-PROMPT:
+[endmacro]
+
+[macro ncs_fail_error_check node]
+    ~mkdir -p $LUX_EXTRA_LOGS/$node;
+    ~cp -r $node/logs $LUX_EXTRA_LOGS/$node;
+    ~if [ -f "$node/logs/ncserr.log.1" ]; then
+    ~  ${NCS_DIR}/bin/ncs --printlog $node/logs/ncserr.log > err;
+    !fi; true
+    ?SH-PROMPT:
+     -^== ERROR ==
+    !if [ -s err ]; then cat err ; rm -f err ; echo "== ERROR ==" ; fi
+    ?SH-PROMPT
+    !rm -f err
+    ?SH-PROMPT:
+[endmacro]
+
+
+
+
+
